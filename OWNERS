@@ -1,4 +1,5 @@
 reviewers:
+  - geowa4
   - boranx
   - robotmaxtron
   - typeid
@@ -7,6 +8,7 @@ reviewers:
   - samanthajayasinghe
   - dustman9000
 approvers:
+  - geowa4
   - boranx
   - robotmaxtron
   - typeid
@@ -15,6 +17,7 @@ approvers:
   - samanthajayasinghe
   - dustman9000
 maintainers:
+  - geowa4
   - boranx
   - robotmaxtron
   - typeid
