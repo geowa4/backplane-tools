@@ -1,0 +1,72 @@
+name: Track Tool Versions
+
+# Records the latest upstream version of every managed tool in versions.json.
+# A commit only lands when a version changes, so downstream builds (e.g. a
+# Konflux PipelineRun filtered on "versions.json".pathChanged()) can trigger on it.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tool-versions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve latest versions
+        env:
+          # Authenticates GitHub API lookups to avoid unauthenticated rate limits
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          go run . list available --output json > "$RUNNER_TEMP/versions.json"
+
+          # A tool that fails to initialize is dropped from the tool map rather than
+          # erroring, so refuse to record a result that is missing previously-seen tools
+          if [[ -f versions.json ]]; then
+            missing=$(jq -r --slurpfile new "$RUNNER_TEMP/versions.json" \
+              'keys - ($new[0] | keys) | join(", ")' versions.json)
+            if [[ -n "$missing" ]]; then
+              echo "::error::Latest versions are missing previously tracked tools: $missing"
+              exit 1
+            fi
+          fi
+          mv "$RUNNER_TEMP/versions.json" versions.json
+
+      - name: Commit changes
+        run: |
+          set -euo pipefail
+          git add versions.json
+          if git diff --cached --quiet; then
+            echo "No tool version changes"
+            exit 0
+          fi
+
+          if git cat-file -e HEAD:versions.json 2>/dev/null; then
+            changes=$(jq -r --slurpfile old <(git show HEAD:versions.json) \
+              'to_entries[] | select(.value != $old[0][.key]) | "- \(.key): \($old[0][.key] // "new") -> \(.value)"' \
+              versions.json)
+          else
+            changes="- initial snapshot"
+          fi
+          echo "$changes" >> "$GITHUB_STEP_SUMMARY"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(tools): update tool versions" -m "$changes"
+          git push origin HEAD:${{ github.ref_name }}

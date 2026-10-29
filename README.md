@@ -116,6 +116,11 @@ gh auth login --hostname  github.com
 backplane-tools list available
 ```
 
+Use `--output json` to get a machine-readable map of each tool to its latest version:
+```shell
+backplane-tools list available --output json
+```
+
 ### List installed tools
 ```shell
 backplane-tools list installed
